@@ -1,0 +1,52 @@
+name: Update Submodules and Publish
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [update-submodules]
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  update-submodules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set Git user identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update Git submodules
+        id: commit
+        run: |
+          git submodule update --init --recursive
+          git submodule foreach --recursive 'git fetch origin gh-pages'
+          git submodule update --remote --merge -v
+          git add .
+          COMMIT_MSG="Update submodules to latest commit"
+          if git diff-index --quiet HEAD --; then
+            echo "No changes to commit"
+            echo "changes_detected=false" >> $GITHUB_ENV
+          else
+            git commit -m "$COMMIT_MSG"
+            echo "changes_detected=true" >> $GITHUB_ENV
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push changes if any
+        if: env.changes_detected == 'true'
+        run: |
+          git push origin HEAD:main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
